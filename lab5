@@ -1,0 +1,61 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Text.RegularExpressions;
+
+namespace ConsoleApp1
+{
+    class Program
+
+    {
+        static int prov(string[] s, int n)
+        {
+            if (s.Length >= n) return 1;
+            else Console.WriteLine("n-го предложения не нашлось");
+            return 0;
+        }
+
+        static void F(string[] s, int n)
+        {
+            
+            for (int i = n - 1; i < s.Length - 1; i++)
+            {
+                string b = "";
+                b += s[i][0];
+                s[i] = s[i].Remove(0, 1);
+                s[i] = s[i].Insert(0, b.ToUpper());
+            }
+            return;
+        }
+        static int F1(string[] s, Regex a)
+        {
+            int k = 0;
+            for (int i = 0; i < s.Length - 1; i++)
+                if (a.IsMatch(s[i]) == true)
+                    k++;
+            return k;
+        }
+
+        static void Main(string[] args)
+        {
+            string[] s;
+            string pr, b;
+            int n, k = 0;
+            n = Convert.ToInt32(Console.ReadLine());
+            pr = Console.ReadLine();
+            s = pr.Split('.');
+
+            Regex reg = new Regex(@"[A-Z][a-z\s]*");
+            if (prov(s, n) != 0)
+            {
+                F(s,n);
+                k = F1(s, reg);
+                if (k != 0)
+                    Console.WriteLine("Кол-во преобразованных предложений: {0}", k);
+            }
+            Console.ReadKey();
+        }
+    }
+}
