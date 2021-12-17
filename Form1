@@ -1,0 +1,423 @@
+using System;
+using System.IO;
+using System.Text;
+using System.Drawing;
+using System.Collections.Generic;
+using System.Windows.Forms;
+using System.Threading;
+
+
+namespace Graphs
+{
+    public partial class Form1 : Form
+    {
+        public Graph Graf = new Graph();//Граф
+
+        public int drag = -1;//перемещаемый узел
+        public int drage = -1;//узел из которого происходит добавление/удаление рёбер
+
+        public int dx1 = 0;//координаты двух точек
+        public int dy1 = 0;//для отображения линии,
+        public int dx2 = 0;//при добавлении
+        public int dy2 = 0;//или удалении рёбер
+
+        public bool IsDeleteEdge = false;//удаляем ли ребро
+        public bool IsAddEdge = false;//добавляем ли ребро
+        public bool IsDeleteNode = false;//удаляем ли узел
+
+        public Form1()
+        {
+            InitializeComponent();  
+        }
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            DoubleBuffered = true;
+        }
+        private void button1_Click(object sender, EventArgs e)
+        {
+            Graf.AddNode(textBox1.Text);
+        }
+
+        private void pictureBox1_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (drag != -1)//если перемещается какой-то узел
+            {
+                foreach (Graph.Node n in Graf.nodes)
+                {
+                    if (drag == n.id)//найти этот узел
+                    {
+                        n.x = e.X;//и переместить
+                        n.y = e.Y;//по координатам указателя мыши
+                        break;
+                    }
+                }
+            }
+            if (drage != -1)//если из какого-то узла происходит добавление/удаление рёбер
+            {
+                foreach (Graph.Node n in Graf.nodes)
+                {
+                    if (drage == n.id)//найти этот узел
+                    {
+                        dx1 = n.x;
+                        dy1 = n.y;//запомнить его координаты
+                        dx2 = e.X;
+                        dy2 = e.Y;//и координаты указателя мыши
+                        break;
+                    }
+                }
+            }
+        }
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            if (Graf.nodes.Count == 0)
+            {
+                button4.Enabled = false;
+            }
+            else
+            {
+                button4.Enabled = true;
+            }
+
+            for (int i = 0; i < Graf.nodes.Count; i++)
+            {
+                for (int j = 0; j < Graf.nodes.Count; j++)
+                {
+                    if (i != j)//узел не выталкивает сам себя
+                    {
+                        double dist = Match.point_distance(Graf.nodes[i].x, Graf.nodes[i].y, Graf.nodes[j].x, Graf.nodes[j].y);
+                        int sz_in = 10;//дополнительное расстояние между узлами
+                        if (dist <= (Graf.sz + sz_in))//если два разных узла оказались внутри друг друга
+                        {
+                            //рандомно вытолкнуть узлы если их координаты совпали
+                            var rand = new Random();
+                            if (Graf.nodes[i].x == Graf.nodes[j].x)
+                            {
+                                if (rand.Next(2) == 1)
+                                    Graf.nodes[i].x += 1;
+                                else
+                                    Graf.nodes[i].x -= 1;
+                            }
+                            if (Graf.nodes[i].y == Graf.nodes[j].y)
+                            {
+                                if (rand.Next(2) == 1)
+                                    Graf.nodes[i].y += 1;
+                                else
+                                    Graf.nodes[i].y -= 1;
+                            }
+                            //узлы выталкиваются в противоположных направлениях
+                            if (Graf.nodes[i].x < Graf.nodes[j].x)
+                            {
+                                Graf.nodes[i].x -= (int)(Graf.sz + sz_in - dist);
+                                Graf.nodes[j].x += (int)(Graf.sz + sz_in - dist);
+                            }
+                            else
+                            {
+                                Graf.nodes[i].x += (int)(Graf.sz + sz_in - dist);
+                                Graf.nodes[j].x -= (int)(Graf.sz + sz_in - dist);
+                            }
+                            if (Graf.nodes[i].y < Graf.nodes[j].y)
+                            {
+                                Graf.nodes[i].y -= (int)(Graf.sz + sz_in - dist);
+                                Graf.nodes[j].y += (int)(Graf.sz + sz_in - dist);
+                            }
+                            else
+                            {
+                                Graf.nodes[i].y += (int)(Graf.sz + sz_in - dist);
+                                Graf.nodes[j].y -= (int)(Graf.sz + sz_in - dist);
+                            }
+                            //****************************************** закончили сдвиг вершин
+                        }
+                    }
+                }
+                if (Graf.nodes[i].x - Graf.sz / 2 < 0) Graf.nodes[i].x = Graf.sz / 2; //смещаем на радиус
+                if (Graf.nodes[i].y - Graf.sz / 2 < 0) Graf.nodes[i].y = Graf.sz / 2;
+                if (Graf.nodes[i].x + Graf.sz / 2 > pictureBox1.Width) Graf.nodes[i].x = pictureBox1.Width - Graf.sz / 2 - 1;
+                if (Graf.nodes[i].y + Graf.sz / 2 > pictureBox1.Height) Graf.nodes[i].y = pictureBox1.Height - Graf.sz / 2 - 1;
+                //не позволяет узлу выйти за пределы экрана
+            }
+
+            Refresh();//перерисовка формы
+        }
+        private void Form1_Paint(object sender, PaintEventArgs e)
+        {
+            pictureBox1.Width = this.Width - 16;//выравнивание pictureBox под размеры формы
+            pictureBox1.Height = this.Height - pictureBox1.Location.Y - 39;//выравнивание pictureBox под размеры формы
+            Graf.x = pictureBox1.Width / 2;//задаёт координаты
+            Graf.y = pictureBox1.Height / 2;//появления новых узлов
+
+            Bitmap buffer = new Bitmap(Width, Height);//Дополнительный буффер
+            Graphics gfx = Graphics.FromImage(buffer);//Двойная буфферизация
+
+            SolidBrush myBrush = new SolidBrush(Color.Black);//кисть для текста
+            SolidBrush myBrush2 = new SolidBrush(Color.White);//кисть для анимации
+            Pen myPen = new Pen(Color.Black);//ручка для узлов
+            Pen myPen2 = new Pen(Color.Blue);//ручка для ребёр
+
+            gfx.Clear(Color.White);//очистка поверхности
+            myPen2.Color = Color.Blue;//по умолчанию все рёбра
+            myBrush2.Color = Color.Blue;//зеленые
+            foreach (Graph.Node n in Graf.nodes)//во всех узлах
+            {
+                foreach (int eg in n.edges)//проверить все рёбра
+                {
+                    foreach (Graph.Node m in Graf.nodes)//найти все узлы
+                    {
+                        if (m.id == eg)//находящие в списке смежности
+                        {
+                            double a = Match.point_direction(n.x, n.y, m.x, m.y);//направление между узлами
+                            double dist = Match.point_distance(n.x, n.y, m.x, m.y);//расстояние между узлами
+
+                            gfx.DrawLine(myPen2,
+                                new Point(n.x + (int)Match.lengthdir_x(Graf.sz / 2, a), n.y + (int)Match.lengthdir_y(Graf.sz / 2, a)),
+                                new Point(n.x + (int)Match.lengthdir_x(dist - (Graf.sz / 2), a),
+                                n.y + (int)Match.lengthdir_y(dist - (Graf.sz / 2), a)));//отрисовка ребра
+                            gfx.FillEllipse(myBrush2, new Rectangle(n.x + (int)Match.lengthdir_x(dist - (Graf.sz / 2), a) - 4,
+                                n.y + (int)Match.lengthdir_y(dist - (Graf.sz / 2), a) - 4, 8, 8));//отрисовка конца ребра
+                            gfx.DrawLine(myPen2, n.x + (int)Match.lengthdir_x(Graf.sz / 2, a), n.y + (int)Match.lengthdir_y(Graf.sz / 2, a),
+                               n.x + (int)Match.lengthdir_x(dist - (Graf.sz / 2), a), n.y + (int)Match.lengthdir_y(dist - (Graf.sz / 2), a));
+
+                        }
+                    }
+                }
+            }
+            foreach (Graph.Node n in Graf.nodes)
+            {
+                myBrush2.Color = Color.White;//обычное состояние узла
+                if (n.active == 1)
+                    myBrush2.Color = Color.SteelBlue;//узел обрабатывается в данный момент
+                gfx.FillEllipse(myBrush2, new Rectangle(n.x - Graf.sz / 2, n.y - Graf.sz / 2, Graf.sz, Graf.sz));//отрисовка фона
+                gfx.DrawEllipse(myPen, new Rectangle(n.x - Graf.sz / 2, n.y - Graf.sz / 2, Graf.sz, Graf.sz));//отрисовка контура
+                gfx.DrawString(n.name, new Font("Arial", 8, FontStyle.Regular), myBrush, new PointF(n.x - Graf.sz / 3, n.y - 10));//отрисовка названия
+            }
+            if (drage != -1)//если из какого-то узла происходит добавление/удаление ребра
+            {
+                myBrush2.Color = Color.Blue;
+                if (IsDeleteEdge||IsDeleteNode)//красный цвет при удалении
+                {
+                    myPen2.Color = Color.Red;
+                    myBrush2.Color = Color.Red;
+                }
+                double a1 = Match.point_direction(dx1, dy1, dx2, dy2);//направление от узла к указателю мыши
+                double dist1 = Match.point_distance(dx1, dy1, dx2, dy2);//расстояние между узлом и указателем мыши
+                gfx.DrawLine(myPen2,
+                    new Point(dx1 + (int)Match.lengthdir_x(Graf.sz / 2, a1), dy1 + (int)Match.lengthdir_y(Graf.sz / 2, a1)),
+                    new Point(dx1 + (int)Match.lengthdir_x(dist1, a1), dy1 + (int)Match.lengthdir_y(dist1, a1)));
+                gfx.FillEllipse(myBrush2,
+                new Rectangle(dx1 + (int)Match.lengthdir_x(dist1, a1) - 4, dy1 + (int)Match.lengthdir_y(dist1, a1) - 4, 8, 8));
+               
+            }
+
+            pictureBox1.Image = buffer;//Двойная буфферизация убирает мерцание
+            myBrush.Dispose();
+            myBrush2.Dispose();
+            myPen.Dispose();
+            myPen2.Dispose();
+        }
+
+        private void button2_Click(object sender, EventArgs e)//добавить ребро
+        {
+            IsAddEdge = true;
+        }
+
+        private void button3_Click(object sender, EventArgs e)//удалить ребро
+        {
+            IsDeleteEdge = true;
+        }
+
+        private void button6_Click(object sender, EventArgs e)//удалить вершину
+        {
+            IsDeleteNode = true;
+        }
+        private void pictureBox1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                if (IsAddEdge || IsDeleteEdge)
+                {
+                    drag = -1;//отключить перемещение
+                    dx1 = 0;
+                    dy1 = 0;
+                    dx2 = 0;
+                    dy2 = 0;//и сбросить координаты отрисовки
+                    foreach (Graph.Node n in Graf.nodes)
+                    {
+                        if (Match.point_distance(n.x, n.y, e.X, e.Y) < Graf.sz / 2)//найти узел на который нажали
+                        {
+                            drage = n.id;//начать добавление/удаление рёбер из него
+                            dx1 = n.x;
+                            dy1 = n.y;//запомнить его координаты
+                            dx2 = e.X;
+                            dy2 = e.Y;//и координаты указателя мыши
+                            break;
+                        }
+                    }
+                }
+                else if (IsDeleteNode)
+                {
+                    drag = -1;//отключить перемещение
+                    drage = -1;//отключить добавление/удаление рёбер
+                    foreach (Graph.Node n in Graf.nodes)
+                    {
+                        if (Match.point_distance(n.x, n.y, e.X, e.Y) < Graf.sz / 2)//найти узел на который нажали
+                        {
+                            Graf.RemoveNode(n.id);//удалить его
+                            break;
+                        }
+                    }
+
+                    IsDeleteNode = false;
+                }
+                else
+                {
+                    drage = -1;//отключить добавление/удаление рёбер
+                    if (drag == -1)//если никакой узел не перемещается
+                        foreach (Graph.Node n in Graf.nodes)
+                            if (Match.point_distance(n.x, n.y, e.X, e.Y) < Graf.sz / 2)//найти узел на который нажали
+                            {
+                                drag = n.id;//захватить его
+                                n.x = e.X;//и переместить
+                                n.y = e.Y;//по координатам указателя мыши
+                                break;
+                            }
+                }
+            } 
+        }
+        private void pictureBox1_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+                drag = -1;//отключить перемещение
+            if (IsDeleteEdge||IsAddEdge)
+            {
+                if (drage != -1)//если из какого то узла начато добавление/удаление рёбер
+                
+                    foreach (Graph.Node n in Graf.nodes)
+                    {
+                        if (Match.point_distance(n.x, n.y, e.X, e.Y) < Graf.sz / 2)//найти узел на котором отпустили кнопку
+                            if (n.id != drage)//если это не тот же самый узел
+                            {
+                                foreach (Graph.Node m in Graf.nodes)
+                                {
+                                    if (m.id == drage)//найти узел из которого было запущено добавление/удаление рёбер
+                                    {
+                                        if (IsDeleteEdge)
+                                        {
+                                            m.RemoveEdge(n.id);
+                                            IsDeleteEdge = false;
+                                        }
+                                        if (IsAddEdge)
+                                        {
+                                            m.AddEdge(n.id);
+                                            IsAddEdge = false;
+                                        }
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                    }
+                drage = -1;//отключить добавление/удаление рёбер
+            }
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            if (Graf.nodes.Count != 0)//сохранение возможно только если граф не пустой
+            {
+                StreamWriter F = new StreamWriter(@"G.grf");
+                foreach (Graph.Node n in Graf.nodes)
+                {
+                    string S = "";
+                    S += n.id.ToString() + ",";
+                    S += n.x.ToString() + ",";//добавить к строке все значимые параметры с разделителем ','
+                    S += n.y.ToString() + ",";
+                    if (n.edges.Count != 0)//если в узле есть рёбра
+                    {
+                        foreach (int eg in n.edges)
+                        {
+                            S += eg.ToString() + ";";//добавить список смежности с разделителем ';'
+                        }
+                        S = S.Remove(S.Length - 1, 1);//удалить последний не нужный ';'
+                    }
+                    S += "," + n.name;
+                    F.WriteLine(S);//записать узел в строку файла
+                }
+                F.Close();
+            }
+        }
+        private void button5_Click(object sender, EventArgs e)
+        {
+            openFileDialog1.ShowDialog();
+        }
+        private void openFileDialog1_FileOk(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            Graf.nodes.Clear();//очистить предыдущий граф
+            StreamReader F = File.OpenText(openFileDialog1.FileName);
+            while (!F.EndOfStream)//читать все строки из файла
+            {
+                string S = F.ReadLine();
+                string[] SS = S.Split(',');//разделить строку (ожидается 4 элемента)
+                List<int> L = new List<int>();//пустой список смежности
+                if (SS[3] != "")
+                {
+                    string[] SSE = SS[3].Split(';');//отдельно разделить список смежности из файла на строки
+                    foreach (string eg in SSE)
+                        L.Add(int.Parse(eg));//заполнение списка смежности
+                }
+                Graf.LoadNode(int.Parse(SS[0]), int.Parse(SS[1]), int.Parse(SS[2]), SS[4], L);//добавить загруженный узел в граф
+            }
+            F.Close();
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            textBox2.Text = "";
+            if (Graf.nodes.Count == 0)
+            {
+                textBox2.Text = "Граф пуст";
+                return;
+            }
+            Graf.used = new List<int>();
+            Graf.p = new List<int>();
+            Graf.ans = new List<Graph.Node>();
+            for (int i = 0; i < Graf.nodes.Count; i++)
+            {
+                Graf.used.Add(0);
+                Graf.p.Add(0);
+            }
+            Graf.cycle = false;
+
+            foreach (Graph.Node n in Graf.nodes)//проверка на наличие циклов
+            {
+                if (Graf.used[Graf.nodes.IndexOf(n)] == 0)
+                    Graf.Circle(n);
+                if (Graf.cycle == true)
+                    break;
+            }
+            if (Graf.cycle == true) textBox2.Text = "Невозможно";
+            //топологическая сортировка
+            else
+            {
+                textBox2.Text = "Processing";
+                for (int i = 0; i < Graf.nodes.Count; i++)
+                    Graf.used[i] = 0;
+                foreach (Graph.Node n in Graf.nodes)
+                    if (Graf.used[Graf.nodes.IndexOf(n)] == 0)
+                    {
+                        textBox2.Text += Convert.ToString(n.id);
+                        n.active = 1;
+                        Graf.TopSort(n);
+                    }
+                
+                Thread.Sleep(1000);
+                foreach (Graph.Node n in Graf.nodes)
+                    n.active = 0;
+
+                textBox2.Text = "";
+                for (int i =0; i< Graf.ans.Count; i++)
+                    textBox2.Text += Graf.ans[i].name + ',';
+                textBox2.Text.Remove(textBox2.Text.Length - 1, 1);
+            }
+        }
+        
+    }
+}
