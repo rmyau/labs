@@ -1,0 +1,210 @@
+using System;
+using System.Collections.Generic;
+using System.Windows.Forms;
+using System.Threading;
+using System.IO;
+
+namespace Graphs
+{
+    public static class Match
+    {
+        public static double degtorad(double deg)//градусы в радианы
+        {
+            return deg * Math.PI / 180;
+        }
+
+        public static double radtodeg(double rad)//радианы в градусы
+        {
+            return rad / Math.PI * 180;
+        }
+
+        public static double lengthdir_x(double len, double dir)//расстояние по X при передвижении по направлению
+        {
+            return len * Math.Cos(degtorad(dir));
+        }
+
+        public static double lengthdir_y(double len, double dir)//расстояние по Y при передвижении по направлению
+        {
+            return len * Math.Sin(degtorad(dir)) * (-1);
+        }
+
+        public static double point_direction(int x1, int y1, int x2, int y2)//угол направления между двумя точками 
+        {
+            return 180 - radtodeg(Math.Atan2(y1 - y2, x1 - x2));
+        }
+
+        public static double point_distance(int x1, int y1, int x2, int y2)//расстояние между двумя точками
+        {
+            return Math.Sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+        }
+    }
+    public class Graph
+    {
+        public class Node
+        {
+            public int id;//уникальный идентификатор узла
+            public int active;//статус обработки узла
+            public int x;//координаты
+            public int y;//для отрисовки вершины
+            public string name;//отображаемое имя
+            public List<int> edges;//список смежности
+
+            public void AddEdge(int id)
+            {
+                if (!edges.Contains(id)) edges.Add(id);//добавить узел в список смежности если его там не было
+            }
+
+            public void RemoveEdge(int id)
+            {
+                edges.Remove(id);//удаление узла из списка смежности
+            }
+        };
+
+
+        public List<Node> nodes = new List<Node>();//узлы графа
+        private int maxid = 0;//для запоминания уникальных идентификаторов
+
+        public List<int> used=new List<int>(4);//для проверки вершин на наличие циклов
+        public List<int> p= new List<int>(4);//массив предков для обхода 
+        public List<Node> ans;//для топологической сортировки
+        public bool cycle = false;
+
+        public int x = 0;//координаты
+        public int y = 0;//появления новых узлов
+        public int sz = 32;//размер узлов (для отрисовки)
+
+        public Graph()
+        {  }
+        public Graph(string f)
+        {
+            string[] F = File.ReadAllLines(f);
+            foreach (string S in F)//читать все строки из файла
+            {
+
+                string[] SS = S.Split(',');//разделить строку (ожидается 4 элемента)
+                List<int> L = new List<int>();//пустой список смежности
+                if (SS[3] != "")
+                {
+                    string[] SSE = SS[3].Split(';');//отдельно разделить список смежности из файла на строки
+                    foreach (string eg in SSE)
+                        L.Add(int.Parse(eg));//заполнение списка смежности
+                }
+                LoadNode(int.Parse(SS[0]), int.Parse(SS[1]), int.Parse(SS[2]), SS[4], L);//добавить загруженный узел в граф
+            }
+            
+        }
+        public void AddNode(string name)//добавление узла в граф
+        {
+            bool find = false;//найдено пустое место между 0 и максимальным известным идентификатором
+            int id = 0;//новый уникальный идентификатор
+            for (int i = 0; i < maxid; i++)//проверить для всех идентификаторов от 0 до максимального
+            {
+                bool exist = false;//такой идентификатор уже существует
+                foreach (Node nd in nodes)
+                {
+                    if (nd.id == i)
+                    {
+                        exist = true;//найден указанный идентификатор
+                        break;
+                    }
+                }
+                if (!exist)//если не существует указанный идентификатор, то 
+                {
+                    id = i;//на его место
+                    find = true;//можно поместить новый узел
+                    break;
+                }
+            }
+            if (!find)//если пустое место не найдено
+            {
+                id = maxid;
+                maxid++;//просто добавить в конец
+            }
+            Node n = new Node();
+            n.id = id;
+            n.active = 0;
+            n.x = x;
+            n.y = y;
+            //все параметры задаются по умолчанию
+            if (name != "")
+                n.name = name;
+            else
+                n.name = id.ToString();//если имя не указано, то прописать туда идентификатор
+            n.edges = new List<int>();//пустой список смежности
+            nodes.Add(n);
+            nodes.Sort((x, y) => x.id.CompareTo(y.id));//сортировка по идентификатору для оптимизации
+        }
+
+        public void RemoveNode(int id)//удаление узла из графа
+        {
+            Node n = null;
+            foreach (Node nd in nodes)
+            {
+                nd.edges.Remove(id);//удалить узел из списков смежности у всех других узлов
+                if (nd.id == id)
+                {
+                    n = nd;//найти сам удаляемый узел
+                }
+            }
+            nodes.Remove(n);
+        }
+        public void LoadNode(int id, int x, int y, string name, List<int> e)//добавление узла при загрузке из файла
+        {
+            Node n = new Node();
+            if (maxid <= id)
+                maxid = id + 1;//запомнить новый максимальный идентификатор
+            n.id = id;
+            n.active = 0;
+            n.x = x;
+            n.y = y;
+            if (name != "")
+                n.name = name;
+            else
+                n.name = id.ToString();
+            n.edges = e;
+            //все параметры, необходимые для создания узла, передаются в функцию, включая список смежности
+            nodes.Add(n);
+            nodes.Sort((xx, yy) => xx.id.CompareTo(yy.id));
+        }
+        public void Circle(Node m)
+        {
+            used[nodes.IndexOf(m)] = 1;
+            for (int i = 0; i < m.edges.Count; i++)
+                foreach (Node n in nodes)
+                    if (n.id == m.edges[i]) {
+                        if (used[nodes.IndexOf(n)] == 0)
+                        {
+                            p[nodes.IndexOf(n)] = nodes.IndexOf(m);
+                            Circle(n);
+                        }
+                        else if (used[nodes.IndexOf(n)] == 1 && p[nodes.IndexOf(n)]!= nodes.IndexOf(m))
+                                cycle = true;
+                        break;
+                    }
+            used[nodes.IndexOf(m)] = 2;
+        }
+        public void TopSort(Node m)
+        {
+            if (used[nodes.IndexOf(m)] == 0)
+            {
+                used[nodes.IndexOf(m)] = 2;
+                m.active = 1;
+                //Thread.Sleep(500);
+                ans.Add(m);
+                foreach (Node n in nodes)
+                    if (m.edges.IndexOf(n.id) != -1)
+                        TopSort(n);
+            }
+        }
+    }
+    static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new Form1());
+        }
+    }
+}
